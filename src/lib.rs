@@ -34,13 +34,13 @@ fn expired_time(ttl: Duration) -> u64 {
 pub trait ISledExt {
     fn expire<K>(&self, key: K, ttl: Duration) -> Result<bool>
     where
-        K: AsRef<[u8]> + Sync + Send;
+        K: AsRef<[u8]>;
 }
 
 impl ISledExt for Db {
     fn expire<K>(&self, key: K, ttl: Duration) -> Result<bool>
     where
-        K: AsRef<[u8]> + Sync + Send,
+        K: AsRef<[u8]>,
     {
         let expire_at = expired_time(ttl).to_be_bytes();
         self.insert(key, expire_at.as_slice())?;
@@ -175,7 +175,7 @@ impl KvDb {
     #[cfg(feature = "ttl")]
     pub fn get_ttl_at<K>(&self, key: K) -> Option<u64>
     where
-        K: AsRef<[u8]> + Sync + Send,
+        K: AsRef<[u8]>,
     {
         let expire_at_iv = match self.ttl_tree.get(key.as_ref()) {
             Ok(Some(at_bytes)) => at_bytes,
@@ -200,7 +200,7 @@ impl KvDb {
     #[cfg(feature = "ttl")]
     pub fn is_expired<K>(&self, key: K) -> Option<bool>
     where
-        K: AsRef<[u8]> + Sync + Send,
+        K: AsRef<[u8]>,
     {
         let expire_at = self.get_ttl_at(key);
 
@@ -219,7 +219,7 @@ impl KvDb {
     pub fn insert_ttl<K, V>(&self, key: K, value: V, ttl: Duration) -> Result<()>
     where
         K: AsRef<[u8]>,
-        V: Serialize + Encode + Sync + Send,
+        V: Serialize + Encode,
     {
         let v = bincode::encode_to_vec(value, bincode::config::standard())?;
         let expire_at = expired_time(ttl).to_be_bytes();
@@ -237,7 +237,7 @@ impl KvDb {
     pub fn insert_or_update<K, V>(&self, key: K, value: V) -> Result<()>
     where
         K: AsRef<[u8]>,
-        V: Serialize + Encode + Sync + Send,
+        V: Serialize + Encode,
     {
         let v = bincode::encode_to_vec(value, bincode::config::standard())?;
         self.kv_tree.insert(key, v)?;
@@ -246,7 +246,7 @@ impl KvDb {
 
     pub fn contains_key<K>(&self, key: K) -> bool
     where
-        K: AsRef<[u8]> + Sync + Send,
+        K: AsRef<[u8]>,
     {
         #[cfg(feature = "ttl")]
         {
@@ -266,7 +266,7 @@ impl KvDb {
     pub fn get<K, V>(&self, key: K) -> Option<V>
     where
         K: AsRef<[u8]>,
-        V: DeserializeOwned + Decode<()> + Sync + Send,
+        V: DeserializeOwned + Decode<()>,
     {
         let val = match self.kv_tree.get(key) {
             Ok(v) => v,

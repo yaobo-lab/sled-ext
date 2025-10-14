@@ -38,3 +38,8 @@ bincode =  "2.0.1"
 name = "demo"
 path = "examples/demo.rs"
 required-features = ["ttl"] 
+
+# [[example]]
+# name = "async_demo"
+# path = "examples/async_demo.rs"
+# required-features = ["ttl"] 
