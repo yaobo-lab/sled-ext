@@ -65,12 +65,18 @@ pub struct KvDb {
 }
 
 #[cfg(feature = "ttl")]
-pub fn def_ttl_cleanup(db: Arc<KvDb>) {
-    //let db = kvdb.clone();
+pub fn def_ttl_cleanup(db: Arc<KvDb>, interval: Option<Duration>, limit: Option<usize>) {
+    let t = match interval {
+        Some(d) => d,
+        None => Duration::from_secs(3),
+    };
+    let limit = match limit {
+        Some(l) => l,
+        None => 200,
+    };
     tokio::spawn(async move {
-        let limit = 200;
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(t).await;
             loop {
                 let now = std::time::Instant::now();
                 let count = db.cleanup(limit);
@@ -80,7 +86,7 @@ pub fn def_ttl_cleanup(db: Arc<KvDb>) {
                 if count < limit {
                     break;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
             }
         }
     });

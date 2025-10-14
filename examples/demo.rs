@@ -54,7 +54,7 @@ async fn main() {
 
     let db = KvDb::new(cfg).expect("db init failed");
     let db = Arc::new(db);
-    def_ttl_cleanup(db.clone());
+    def_ttl_cleanup(db.clone(), Some(Duration::from_secs(5)), Some(100));
     set_expire_event(db.clone(), |key| println!("expire key-->: {key}"));
 
     //basic
