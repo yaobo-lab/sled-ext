@@ -234,7 +234,7 @@ impl KvDb {
         Ok(())
     }
 
-    pub fn insert<K, V>(&self, key: K, value: V) -> Result<()>
+    pub fn insert_or_update<K, V>(&self, key: K, value: V) -> Result<()>
     where
         K: AsRef<[u8]>,
         V: Serialize + Encode + Sync + Send,

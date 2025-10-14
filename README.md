@@ -15,7 +15,7 @@ cargo run --example demo --features=ttl
 ## Usage
 
 ```rust
- pub use bincode::{Decode, Encode};
+pub use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use sled_ext::{KvDb, KvDbConfig, def_ttl_cleanup, set_expire_event};
 use std::time::Duration;
@@ -79,15 +79,15 @@ async fn main() {
     let v = db.get::<_, i32>(&key);
     println!("get clean key: {},value: {:?}", key, v);
 
-    db.insert(&key, 12).expect("insert failed");
+    db.insert_or_update(&key, 12).expect("insert failed");
     let v = db.get::<_, i32>(&key);
     println!("get key: {},value: {:?}", key, v);
-    db.insert(&key, 14).expect("insert failed");
+    db.insert_or_update(&key, 14).expect("insert failed");
     println!("get key: {},value: {:?}", key, v);
 
     //delete
     let key_delete = "key-delete-1";
-    db.insert(&key_delete, 12).expect("insert failed");
+    db.insert_or_update(&key_delete, 12).expect("insert failed");
     let v = db.get::<_, i32>(&key_delete);
     println!("get key: {},value: {:?}", key_delete, v);
     db.remove(&key_delete).expect("remove failed");
@@ -96,28 +96,29 @@ async fn main() {
 
     //update
     let key_update = "key-update-1";
-    db.insert(&key_update, 13).expect("insert failed");
+    db.insert_or_update(&key_update, 13).expect("insert failed");
     let v = db.get::<_, i32>(&key_update);
     println!("get key: {},value: {:?}", key_update, v);
-    db.insert(&key_update, 14).expect("insert failed");
+    db.insert_or_update(&key_update, 14).expect("insert failed");
     let v = db.get::<_, i32>(&key_update);
     println!("get key: {},value: {:?}", key_update, v);
 
     //other
     let key_other = "key-other-1";
-    db.insert(&key_other, 12).expect("insert failed");
+    db.insert_or_update(&key_other, 12).expect("insert failed");
     let v = db.get::<_, Vec<u8>>(&key_other);
     println!("get key_other: {},value: {:?}", key_other, v);
 
     let key_other2 = "key-other-2";
-    db.insert(&key_other2, true).expect("insert failed");
+    db.insert_or_update(&key_other2, true)
+        .expect("insert failed");
     let v = db.get::<_, Vec<u8>>(&key_other2);
     println!("get key: {},value: {:?}", key_other2, v);
 
     //struct
     let struct_key = "struct-1";
     let s = TestStruct::default();
-    db.insert(struct_key, &s).expect("insert failed");
+    db.insert_or_update(struct_key, &s).expect("insert failed");
     sleep(Duration::from_secs(1)).await;
     let v = db.get::<_, TestStruct>(struct_key);
     println!("get struct key: {},value: {:?}", struct_key, v);
@@ -146,4 +147,5 @@ async fn main() {
     let contains_key = db.contains_key(&ttl_key);
     println!("contains_key : {}", contains_key);
 }
+
 ```
