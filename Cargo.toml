@@ -7,11 +7,9 @@ license = "MIT"
 authors = ["yaobos@outlook.com"]  
 repository = "https://github.com/yaobo-lab/sled-ext"
 
-
 [features]
-default = ["ttl"]
+default = []
 ttl=["tokio"]
-
 
 [dependencies]
 serde_json = '1.0.145'
@@ -39,3 +37,4 @@ bincode =  "2.0.1"
 [[example]]
 name = "demo"
 path = "examples/demo.rs"
+required-features = ["sled-ext/ttl"] 
