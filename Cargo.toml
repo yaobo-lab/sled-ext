@@ -1,6 +1,6 @@
 [package]
 name = "sled-ext"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "A sled extension(TTL,GET ,INSERT...)"
 license = "MIT"   
@@ -8,7 +8,7 @@ authors = ["yaobos@outlook.com"]
 repository = "https://github.com/yaobo-lab/sled-ext"
 
 [features]
-default = []
+default = ["ttl"]
 ttl=["tokio"]
 
 [dependencies]

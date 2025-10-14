@@ -59,9 +59,10 @@ const KV_TREE: &[u8] = b"__kv_tree@";
 const _TTL_TREE: &[u8] = b"__tll_tree@";
 
 pub struct KvDb {
-    pub(crate) kv_tree: sled::Tree,
+    pub db: Db,
+    pub kv_tree: sled::Tree,
     #[cfg(feature = "ttl")]
-    pub(crate) ttl_tree: sled::Tree,
+    pub ttl_tree: sled::Tree,
 }
 
 #[cfg(feature = "ttl")]
@@ -122,8 +123,8 @@ impl KvDb {
         #[cfg(feature = "ttl")]
         let ttl_tree = db.open_tree(_TTL_TREE)?;
 
-        // let db = Arc::new(db);
         Ok(KvDb {
+            db,
             kv_tree,
             #[cfg(feature = "ttl")]
             ttl_tree,
@@ -287,5 +288,27 @@ impl KvDb {
         }
 
         None
+    }
+
+    pub fn remove<K>(&self, key: K) -> Result<()>
+    where
+        K: AsRef<[u8]>,
+    {
+        let key_ref = key.as_ref();
+        if let Err(e) = (&self.kv_tree, &self.ttl_tree).transaction(|(kv, ttl)| {
+            kv.remove(key_ref)?;
+            ttl.remove(key_ref)?;
+            Ok::<_, ConflictableTransactionError<()>>(())
+        }) {
+            return Err(anyhow!("remove key err: {:?}", e));
+        }
+        Ok(())
+    }
+
+    pub fn clean(&self) -> Result<()> {
+        self.db.clear()?;
+        self.kv_tree.clear()?;
+        self.ttl_tree.clear()?;
+        Ok(())
     }
 }

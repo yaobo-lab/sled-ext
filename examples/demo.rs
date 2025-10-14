@@ -50,19 +50,52 @@ async fn main() {
         cache_capacity: 1024 * 1024,
         flush_every_ms: 1000,
     };
-    let key = "hello-1";
 
     let db = KvDb::new(cfg).expect("db init failed");
+    db.clean().expect(" clean failed");
     let db = Arc::new(db);
     def_ttl_cleanup(db.clone(), Some(Duration::from_secs(5)), Some(100));
     set_expire_event(db.clone(), |key| println!("expire key-->: {key}"));
 
     //basic
+    let key = "hello-1";
+    let v = db.get::<_, i32>(&key);
+    println!("get clean key: {},value: {:?}", key, v);
+
     db.insert(&key, 12).expect("insert failed");
     let v = db.get::<_, i32>(&key);
     println!("get key: {},value: {:?}", key, v);
     db.insert(&key, 14).expect("insert failed");
     println!("get key: {},value: {:?}", key, v);
+
+    //delete
+    let key_delete = "key-delete-1";
+    db.insert(&key_delete, 12).expect("insert failed");
+    let v = db.get::<_, i32>(&key_delete);
+    println!("get key: {},value: {:?}", key_delete, v);
+    db.remove(&key_delete).expect("remove failed");
+    let v = db.get::<_, i32>(&key_delete);
+    println!("get key: {},value: {:?}", key_delete, v);
+
+    //update
+    let key_update = "key-update-1";
+    db.insert(&key_update, 13).expect("insert failed");
+    let v = db.get::<_, i32>(&key_update);
+    println!("get key: {},value: {:?}", key_update, v);
+    db.insert(&key_update, 14).expect("insert failed");
+    let v = db.get::<_, i32>(&key_update);
+    println!("get key: {},value: {:?}", key_update, v);
+
+    //other
+    let key_other = "key-other-1";
+    db.insert(&key_other, 12).expect("insert failed");
+    let v = db.get::<_, Vec<u8>>(&key_other);
+    println!("get key_other: {},value: {:?}", key_other, v);
+
+    let key_other2 = "key-other-2";
+    db.insert(&key_other2, true).expect("insert failed");
+    let v = db.get::<_, Vec<u8>>(&key_other2);
+    println!("get key: {},value: {:?}", key_other2, v);
 
     //struct
     let struct_key = "struct-1";
