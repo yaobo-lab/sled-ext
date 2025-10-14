@@ -6,6 +6,12 @@
 cargo add sled-ext
 ```
 
+## Example
+
+```bash
+cargo run --example demo --features=ttl
+```
+
 ## Usage
 
 ```rust

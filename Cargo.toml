@@ -37,4 +37,4 @@ bincode =  "2.0.1"
 [[example]]
 name = "demo"
 path = "examples/demo.rs"
-required-features = ["sled-ext/ttl"] 
+required-features = ["ttl"] 
