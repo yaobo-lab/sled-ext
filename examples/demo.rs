@@ -1,14 +1,3 @@
-# A sled extension(TTL,GET ,INSERT...)
-
-## Install
-
-```bash
-cargo add sled-ext
-```
-
-## Usage
-
-```rust
 pub use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use sled_ext::{KvDb, KvDbConfig, def_ttl_cleanup, set_expire_event};
@@ -107,5 +96,3 @@ async fn main() {
     let contains_key = db.contains_key(&ttl_key);
     println!("contains_key : {}", contains_key);
 }
-
-```

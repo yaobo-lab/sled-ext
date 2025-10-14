@@ -1,4 +1,6 @@
 use anyhow::Result;
+#[cfg(feature = "ttl")]
+use anyhow::anyhow;
 pub use bincode::{Decode, Encode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -10,6 +12,8 @@ use sled::Transactional;
 use sled::transaction::ConflictableTransactionError;
 use sled::{Config, Db};
 
+#[cfg(feature = "ttl")]
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 fn _now() -> u64 {
     SystemTime::now()
@@ -61,12 +65,12 @@ pub struct KvDb {
 }
 
 #[cfg(feature = "ttl")]
-pub fn def_ttl_cleanup(db: KvDb) {
+pub fn def_ttl_cleanup(db: Arc<KvDb>) {
     //let db = kvdb.clone();
     tokio::spawn(async move {
         let limit = 200;
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             loop {
                 let now = std::time::Instant::now();
                 let count = db.cleanup(limit);
@@ -77,6 +81,24 @@ pub fn def_ttl_cleanup(db: KvDb) {
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        }
+    });
+}
+
+#[cfg(feature = "ttl")]
+pub fn set_expire_event<F>(db: Arc<KvDb>, _evt: F)
+where
+    F: Fn(String) + Send + Sync + 'static,
+{
+    tokio::spawn(async move {
+        for event in db.ttl_tree.watch_prefix(vec![]) {
+            match event {
+                Event::Remove { key } => {
+                    let key = String::from_utf8_lossy(&key).into_owned();
+                    _evt(key);
+                }
+                _ => {}
             }
         }
     });
@@ -100,22 +122,6 @@ impl KvDb {
             #[cfg(feature = "ttl")]
             ttl_tree,
         })
-    }
-
-    #[cfg(feature = "ttl")]
-    pub fn set_expire_event<F>(&self, _evt: F)
-    where
-        F: Fn(String),
-    {
-        for event in self.ttl_tree.watch_prefix(vec![]) {
-            match event {
-                Event::Remove { key } => {
-                    let key = String::from_utf8_lossy(&key).into_owned();
-                    _evt(key);
-                }
-                _ => {}
-            }
-        }
     }
 
     #[cfg(feature = "ttl")]
@@ -159,16 +165,6 @@ impl KvDb {
         count
     }
 
-    pub fn insert<K, V>(&self, key: K, value: V) -> Result<()>
-    where
-        K: AsRef<[u8]>,
-        V: Serialize + Encode + Sync + Send,
-    {
-        let v = bincode::encode_to_vec(value, bincode::config::standard())?;
-        self.kv_tree.insert(key, v)?;
-        Ok(())
-    }
-
     #[cfg(feature = "ttl")]
     pub fn get_ttl_at<K>(&self, key: K) -> Option<u64>
     where
@@ -210,6 +206,35 @@ impl KvDb {
         }
 
         Some(false)
+    }
+
+    #[cfg(feature = "ttl")]
+    pub fn insert_ttl<K, V>(&self, key: K, value: V, ttl: Duration) -> Result<()>
+    where
+        K: AsRef<[u8]>,
+        V: Serialize + Encode + Sync + Send,
+    {
+        let v = bincode::encode_to_vec(value, bincode::config::standard())?;
+        let expire_at = expired_time(ttl).to_be_bytes();
+
+        if let Err(e) = (&self.kv_tree, &self.ttl_tree).transaction(|(kv, ttl)| {
+            kv.insert(key.as_ref(), v.clone())?;
+            ttl.insert(key.as_ref(), expire_at.as_slice())?;
+            Ok::<_, ConflictableTransactionError<()>>(())
+        }) {
+            return Err(anyhow!("insert_ttl err: {:?}", e));
+        }
+        Ok(())
+    }
+
+    pub fn insert<K, V>(&self, key: K, value: V) -> Result<()>
+    where
+        K: AsRef<[u8]>,
+        V: Serialize + Encode + Sync + Send,
+    {
+        let v = bincode::encode_to_vec(value, bincode::config::standard())?;
+        self.kv_tree.insert(key, v)?;
+        Ok(())
     }
 
     pub fn contains_key<K>(&self, key: K) -> bool
