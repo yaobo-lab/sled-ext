@@ -234,6 +234,18 @@ impl KvDb {
         Ok(())
     }
 
+    #[cfg(feature = "ttl")]
+    pub fn refresh_ttl<K>(&self, key: K, ttl: Duration) -> Result<()>
+    where
+        K: AsRef<[u8]>,
+    {
+        if !self.contains_key(&key) {
+            return Err(anyhow!("key is not exist"));
+        }
+        let expire_at = expired_time(ttl).to_be_bytes();
+        self.ttl_tree.insert(key, expire_at.as_slice())?;
+        Ok(())
+    }
     pub fn insert_or_update<K, V>(&self, key: K, value: V) -> Result<()>
     where
         K: AsRef<[u8]>,
