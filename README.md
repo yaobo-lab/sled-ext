@@ -1,182 +1,162 @@
-# A sled extension(TTL,GET ,INSERT...)
+# sled-ext
 
-## Install
+`sled-ext` 是一个基于 [`sled`](https://github.com/spacejam/sled) 的轻量级扩展库，提供更易用的键值读写接口，以及开箱即用的 TTL 过期能力。
+
+它适合这类场景：
+
+- 想继续使用 `sled` 作为本地嵌入式数据库
+- 希望用泛型 API 直接存取 Rust 类型
+- 需要为 key 设置过期时间，并定期清理失效数据
+
+## 特性
+
+- 基于 `sled` 的本地 KV 存储封装
+- 支持泛型读写，适合结构体和基础类型
+- 支持 TTL 写入、续期、过期检查
+- 支持后台定时清理过期 key
+- 支持监听过期删除事件
+
+## 安装
 
 ```bash
 cargo add sled-ext
 ```
 
-## Example
+默认启用 `ttl` 功能。
 
-```bash
-cargo run --example demo --features=ttl
-```
-
-## Usage
+## 快速开始
 
 ```rust
-pub use bincode::{Decode, Encode};
-use chrono::Local;
 use serde::{Deserialize, Serialize};
-use sled_ext::{KvDb, KvDbConfig, def_ttl_cleanup, set_expire_event};
-use std::time::Duration;
-use std::{process, sync::Arc};
-use tokio::time::sleep;
-use toolkit_rs::{
-    logger::{self, LogConfig},
-    painc::{PaincConf, set_panic_handler},
-};
+use sled_ext::{Decode, Encode, KvDb, KvDbConfig};
 
-#[derive(Decode, Encode, Debug, Serialize, Deserialize)]
-pub struct TestStruct {
-    pub level: u8,
-    pub size: usize,
-    pub console: bool,
-    pub file: String,
-    pub bounded: Option<usize>,
-    pub filters: Option<Vec<String>>,
-}
-impl Default for TestStruct {
-    fn default() -> Self {
-        Self {
-            level: 1,
-            size: 1024 * 1024,
-            console: true,
-            file: "log.log".to_string(),
-            bounded: Some(10),
-            filters: None,
-        }
-    }
+#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
+struct User {
+    id: u64,
+    name: String,
 }
 
-#[tokio::main]
-async fn main() {
-    set_panic_handler(PaincConf::default());
-
-    let cfg = LogConfig {
-        filters: Some(vec!["sled".to_string()]),
-        ..LogConfig::default()
-    };
-
-    logger::setup(cfg).unwrap_or_else(|e| {
-        println!("log setup err:{}", e);
-        process::exit(1);
-    });
-
-    let cfg = KvDbConfig {
-        path: "kv_db".to_string(),
+fn main() -> anyhow::Result<()> {
+    let db = KvDb::new(KvDbConfig {
+        path: "data/demo-db".to_string(),
         cache_capacity: 1024 * 1024,
         flush_every_ms: 1000,
+    })?;
+
+    let user = User {
+        id: 1,
+        name: "Alice".to_string(),
     };
 
-    let db = KvDb::new(cfg).expect("db init failed");
-    db.clean().expect(" clean failed");
-    let db = Arc::new(db);
-    def_ttl_cleanup(db.clone(), Some(Duration::from_secs(5)), Some(100));
-    set_expire_event(db.clone(), |key| {
-        let now = Local::now().format("%Y-%m-%d %H:%M:%S");
-        println!("{}: expire key-->: {key}", now);
-    });
+    db.insert_or_update("user:1", &user)?;
 
-    //basic
-    println!("\n\n basic  test------------------->");
-    let key = "hello-1";
-    let v = db.get::<_, i32>(&key);
-    println!("get clean key: {},value: {:?}", key, v);
+    let value = db.get::<_, User>("user:1");
+    println!("{value:?}");
 
-    db.insert_or_update(&key, 12).expect("insert failed");
-    let v = db.get::<_, i32>(&key);
-    println!("get key: {},value: {:?}", key, v);
-    db.insert_or_update(&key, 14).expect("insert failed");
-    println!("get key: {},value: {:?}", key, v);
-
-    //delete
-    println!("\n\ndelete test------------------->");
-    let key_delete = "key-delete-1";
-    db.insert_or_update(&key_delete, 12).expect("insert failed");
-    let v = db.get::<_, i32>(&key_delete);
-    println!("get key: {},value: {:?}", key_delete, v);
-    db.remove(&key_delete).expect("remove failed");
-    let v = db.get::<_, i32>(&key_delete);
-    println!("get key: {},value: {:?}", key_delete, v);
-
-    //update
-    println!("\n\n update test------------------->");
-    let key_update = "key-update-1";
-    db.insert_or_update(&key_update, 13).expect("insert failed");
-    let v = db.get::<_, i32>(&key_update);
-    println!("get key: {},value: {:?}", key_update, v);
-    db.insert_or_update(&key_update, 14).expect("insert failed");
-    let v = db.get::<_, i32>(&key_update);
-    println!("get key: {},value: {:?}", key_update, v);
-
-    //other
-    println!("\n\n other test------------------->");
-    let key_other = "key-other-1";
-    db.insert_or_update(&key_other, 12).expect("insert failed");
-    let v = db.get::<_, Vec<u8>>(&key_other);
-    println!("get key_other: {},value: {:?}", key_other, v);
-
-    let key_other2 = "key-other-2";
-    db.insert_or_update(&key_other2, true)
-        .expect("insert failed");
-    let v = db.get::<_, Vec<u8>>(&key_other2);
-    println!("get key: {},value: {:?}", key_other2, v);
-
-    //struct
-    println!("\n\n struct test------------------->");
-    let struct_key = "struct-1";
-    let s = TestStruct::default();
-    db.insert_or_update(struct_key, &s).expect("insert failed");
-    sleep(Duration::from_secs(1)).await;
-    let v = db.get::<_, TestStruct>(struct_key);
-    println!("get struct key: {},value: {:?}", struct_key, v);
-
-    //ttl
-    println!("\n\n ttl test------------------->");
-    let ttl_key = "hello-2";
-    db.insert_ttl(&ttl_key, 13, Duration::from_secs(5))
-        .expect("insert failed");
-
-    sleep(Duration::from_secs(3)).await;
-    let v = db.get::<_, i32>(&ttl_key);
-    println!("after 3 sec get ttl_key: {},value: {:?}", ttl_key, v);
-    let ttl_v = db.get_ttl_at(&ttl_key);
-    println!("get_ttl_at value: {:?}", ttl_v);
-
-    let is_expired = db.is_expired(&ttl_key);
-    println!("is_expired : {:?}", is_expired);
-
-    let contains_key = db.contains_key(&ttl_key);
-    println!("contains_key : {}", contains_key);
-
-    sleep(Duration::from_secs(3)).await;
-    let v = db.get::<_, i32>(&ttl_key);
-    println!("after 3 sec get ttl_key: {},value: {:?}", ttl_key, v);
-
-    // ttl refresh
-    println!("\n\n ttl refresh test------------------->");
-    let ttl_ref_key = "hello-refresh-2";
-    println!("current time: {}", Local::now().format("%Y-%m-%d %H:%M:%S"));
-    db.insert_ttl(&ttl_ref_key, 13, Duration::from_secs(5))
-        .expect("insert failed");
-    let at = db.get_ttl_at(&ttl_ref_key);
-    println!("get_ttl_at: {},at: {:?}", ttl_ref_key, at);
-
-    sleep(Duration::from_secs(3)).await;
-    let at = db.get_ttl_at(&ttl_ref_key);
-    println!("after 3 sec get ttl_key: {},at: {:?}", ttl_ref_key, at);
-
-    println!(
-        "refresh current time: {}",
-        Local::now().format("%Y-%m-%d %H:%M:%S")
-    );
-    db.refresh_ttl(&ttl_ref_key, Duration::from_secs(5))
-        .expect(" refresh ttl failed");
-    let at = db.get_ttl_at(&ttl_ref_key);
-    println!("get_ttl_at: {},at: {:?}", ttl_ref_key, at);
-
-    sleep(Duration::from_secs(6)).await;
-    std::process::exit(0);
+    Ok(())
 }
 ```
+
+## TTL 用法
+
+启用默认特性后，可以直接使用 TTL 相关能力。
+
+```rust
+use sled_ext::{KvDb, KvDbConfig, def_ttl_cleanup, set_expire_event};
+use std::sync::Arc;
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let db = Arc::new(KvDb::new(KvDbConfig {
+        path: "data/ttl-db".to_string(),
+        cache_capacity: 1024 * 1024,
+        flush_every_ms: 1000,
+    })?);
+
+    db.insert_ttl("session:1", "token-123", Duration::from_secs(10))?;
+
+    def_ttl_cleanup(db.clone(), Some(Duration::from_secs(3)), Some(100));
+
+    set_expire_event(db.clone(), |key| {
+        println!("expired key: {key}");
+    });
+
+    let expire_at = db.get_ttl_at("session:1");
+    println!("expire_at: {expire_at:?}");
+
+    let exists = db.contains_key("session:1");
+    println!("contains_key: {exists}");
+
+    db.refresh_ttl("session:1", Duration::from_secs(30))?;
+
+    Ok(())
+}
+```
+
+## 运行示例
+
+仓库自带了完整示例：
+
+```bash
+cargo run --example demo
+```
+
+示例覆盖了以下能力：
+
+- 基础写入与读取
+- 删除 key
+- 更新 value
+- 读取结构体
+- TTL 写入与到期检查
+- TTL 续期
+- 过期事件监听
+
+## 主要 API
+
+### `KvDb`
+
+- `KvDb::new(config)`：初始化数据库
+- `insert_or_update(key, value)`：插入或覆盖数据
+- `get::<_, T>(key)`：按类型读取数据
+- `contains_key(key)`：检查 key 是否存在
+- `remove(key)`：删除 key
+- `clean()`：清空数据库内容
+
+### TTL 相关
+
+- `insert_ttl(key, value, ttl)`：写入带过期时间的数据
+- `get_ttl_at(key)`：获取过期时间戳
+- `is_expired(key)`：检查 key 是否已过期
+- `refresh_ttl(key, ttl)`：刷新过期时间
+- `def_ttl_cleanup(db, interval, limit)`：启动后台清理任务
+- `set_expire_event(db, callback)`：监听过期删除事件
+
+## 数据编码说明
+
+- 写入数据时使用 `bincode` 编码
+- 建议类型同时派生 `Serialize`、`Deserialize`、`Encode`、`Decode`
+- 基础类型如 `i32`、`bool`、`String` 可直接存取
+
+示例：
+
+```rust
+#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
+struct AppConfig {
+    enabled: bool,
+    retries: u32,
+}
+```
+
+## 使用建议
+
+- TTL 数据只有在执行清理任务后才会从底层存储中删除
+- 如果你依赖自动清理，建议在应用启动时调用 `def_ttl_cleanup`
+- `contains_key` 会结合 TTL 状态判断，因此过期 key 会返回 `false`
+- 过期事件监听依赖后台删除动作触发
+
+## 项目信息
+
+- Crate: `sled-ext`
+- Repository: <https://github.com/yaobo-lab/sled-ext>
+- License: MIT
